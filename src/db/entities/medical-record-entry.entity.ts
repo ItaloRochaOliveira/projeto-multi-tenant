@@ -1,5 +1,6 @@
 import {
   Column,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -56,6 +57,14 @@ export class MedicalRecordEntry {
     default: () => 'CURRENT_TIMESTAMP(3)',
   })
   createdAt!: Date;
+
+  @DeleteDateColumn({
+    name: 'deleted_at',
+    type: 'datetime',
+    precision: 3,
+    nullable: true,
+  })
+  deletedAt!: Date | null;
 
   @ManyToOne(() => Tenant, (tenant) => tenant.medicalRecordEntries, {
     onDelete: 'RESTRICT',

@@ -2,7 +2,7 @@ import { Consultation } from "@/db/entities";
 import { appDataSource } from "@/db/appDataSource";
 import ConsultationRepository from "../ConsultationRepository";
 import RepositoryModel from "../RepositoryModel";
-import type { Repository } from "typeorm";
+import type { DeleteResult, Repository } from "typeorm";
 
 export default class TypeORMConsultationRepository
   extends RepositoryModel<Consultation>
@@ -20,5 +20,10 @@ export default class TypeORMConsultationRepository
 
   findByTenantAndId(tenantId: string, id: string): Promise<Consultation | null> {
     return this.typeORM.findOne({ where: { id, tenantId } });
+  }
+
+  override async delete(id: string): Promise<DeleteResult> {
+    const r = await this.typeORM.softDelete(id);
+    return { affected: r.affected ?? 0, raw: r.raw };
   }
 }

@@ -15,6 +15,8 @@ export type CreateTenantInput = {
   document?: string | null;
   metadata?: Record<string, unknown> | null;
   isActive?: boolean;
+  /** Quem está a criar o tenant (JWT); grava em `created_by_user_id`. */
+  createdByUserId?: string | null;
 };
 
 export type UpdateTenantInput = Partial<
@@ -40,6 +42,7 @@ export default class TenantCrudService {
       document: data.document ?? null,
       metadata: data.metadata ?? null,
       isActive: data.isActive ?? true,
+      createdByUserId: data.createdByUserId ?? null,
     } as Tenant;
     const saved = await this.repo.create(tenant);
     if (!saved) throw new BadRequest("Não foi possível criar a instituição");

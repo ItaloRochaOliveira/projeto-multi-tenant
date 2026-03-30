@@ -1,7 +1,7 @@
 import type { AuthRequest } from "@/middleware/auth";
 import TenantCrudService from "@/service/tenant/TenantCrudService";
 import TypeORMTenantsRepository from "@/service/repository/typeorm/typeormTenants";
-import type { NextFunction, Request, Response } from "express";
+import type { NextFunction, Response } from "express";
 import { IdParamSchema } from "../shared/idParamSchema";
 import {
   CreateTenantBodySchema,
@@ -13,10 +13,13 @@ export default class TenantApiController {
     return new TenantCrudService(new TypeORMTenantsRepository());
   }
 
-  create = async (req: Request, res: Response, next: NextFunction) => {
+  create = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const body = CreateTenantBodySchema.parse(req.body);
-      const result = await this.service().create(body);
+      const result = await this.service().create({
+        ...body,
+        createdByUserId: req.user!.id,
+      });
       res.status(201).json(result);
     } catch (e) {
       next(e);

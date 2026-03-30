@@ -1,5 +1,6 @@
 import {
   Column,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -64,6 +65,14 @@ export class Consultation {
     onUpdate: 'CURRENT_TIMESTAMP(3)',
   })
   updatedAt!: Date;
+
+  @DeleteDateColumn({
+    name: 'deleted_at',
+    type: 'datetime',
+    precision: 3,
+    nullable: true,
+  })
+  deletedAt!: Date | null;
 
   @ManyToOne(() => Tenant, (tenant) => tenant.consultations, {
     onDelete: 'RESTRICT',

@@ -1,5 +1,6 @@
 import {
   Column,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -14,9 +15,7 @@ import { Patient } from './patient.entity';
 import { Tenant } from './tenant.entity';
 
 @Entity('medical_records')
-@Index('uq_medical_records_tenant_patient', ['tenantId', 'patientId'], {
-  unique: true,
-})
+@Index('ix_medical_records_tenant_patient', ['tenantId', 'patientId'])
 @Index('ix_medical_records_tenant', ['tenantId'])
 export class MedicalRecord {
   @PrimaryColumn('char', { length: 36 })
@@ -53,6 +52,14 @@ export class MedicalRecord {
     onUpdate: 'CURRENT_TIMESTAMP(3)',
   })
   updatedAt!: Date;
+
+  @DeleteDateColumn({
+    name: 'deleted_at',
+    type: 'datetime',
+    precision: 3,
+    nullable: true,
+  })
+  deletedAt!: Date | null;
 
   @ManyToOne(() => Tenant, (tenant) => tenant.medicalRecords, {
     onDelete: 'RESTRICT',
