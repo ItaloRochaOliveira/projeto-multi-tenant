@@ -5,9 +5,10 @@ import { Router } from "express";
 const router = Router();
 const ctrl = new TenantApiController();
 
-router.post("/", (req, res, next) => ctrl.create(req, res, next));
-
 router.use(authenticateToken);
+router.post("/", (req, res, next) =>
+  ctrl.create(req as AuthRequest, res, next),
+);
 router.get("/", (req, res, next) =>
   ctrl.list(req as AuthRequest, res, next),
 );

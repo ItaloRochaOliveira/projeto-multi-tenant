@@ -7,7 +7,10 @@
     "start": "node build/server.js",
     "start:dev": "tsx watch src/server.ts",
     "build": "tsup src --out-dir build",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:locale": "tsx teste/local-api-runner.ts",
+    "test:multi-tenant": "tsx teste/multi-tenant-isolation-runner.ts",
+    "docker:rebuild-api": "docker compose build --no-cache api && docker compose up -d"
   },
   "author": "Italo Rocha Oliveira",
   "license": "ISC",

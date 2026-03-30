@@ -1,0 +1,91 @@
+# =============================================================================
+# Schema SQL na raiz do repositório (fonte única — versionar estes ficheiros):
+#
+#   ./init.sql
+#     → Serviço `db`: montado em /docker-entrypoint-initdb.d/01-init.sql
+#     → Corre só na primeira criação do volume MySQL (dados vazios).
+#
+#   ./migration.sql
+#     → Serviço `migrate`: montado em /migration.sql (read-only)
+#     → Corre em cada `docker compose up`, depois do `db` saudável (idempotente).
+#
+# Ver labels nos contentores `multi_tenant_db` e `multi_tenant_migrate`.
+# =============================================================================
+services:
+  migrate:
+    image: mysql:8.0
+    container_name: multi_tenant_migrate
+    labels:
+      multi-tenant.schema.file: migration.sql
+      multi-tenant.schema.role: "Migrações incrementais idempotentes (sempre que sobe o stack)"
+    env_file:
+      - .env
+    networks:
+      - multi_tenant_network
+    volumes:
+      # Repositório: ./migration.sql — aplicado pelo script em `command` abaixo
+      - ./migration.sql:/migration.sql:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        export MYSQL_PWD="$$MYSQL_ROOT_PASSWORD"
+        mysql -h db -uroot multi_tenant < /migration.sql
+        echo "OK: migration.sql (repo) aplicado."
+
+  db:
+    image: mysql:8.0
+    container_name: multi_tenant_db
+    labels:
+      multi-tenant.schema.file: init.sql
+      multi-tenant.schema.role: "Bootstrap do schema (apenas volume MySQL novo/vazio)"
+    # host:contentor — MySQL escuta em 3306 *dentro* do contentor
+    ports:
+      - 3311:3306
+    env_file:
+      - .env
+    cap_add:
+      - SYS_NICE
+    volumes:
+      - multi_tenant_db_data:/var/lib/mysql
+      # Repositório: ./init.sql — MySQL executa scripts em docker-entrypoint-initdb.d na 1.ª inicialização
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - multi_tenant_network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: multi_tenant_api:1.0.0
+    container_name: multi_tenant_api
+    env_file:
+      - .env
+    ports:
+      - "3006:3006"
+    networks:
+      - multi_tenant_network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+
+networks:
+  multi_tenant_network:
+    driver: bridge
+volumes:
+  multi_tenant_db_data:

@@ -2,7 +2,7 @@ import { MedicalRecordEntry } from "@/db/entities";
 import { appDataSource } from "@/db/appDataSource";
 import MedicalRecordEntryRepository from "../MedicalRecordEntryRepository";
 import RepositoryModel from "../RepositoryModel";
-import type { Repository } from "typeorm";
+import type { DeleteResult, Repository } from "typeorm";
 
 export default class TypeORMMedicalRecordEntryRepository
   extends RepositoryModel<MedicalRecordEntry>
@@ -33,5 +33,10 @@ export default class TypeORMMedicalRecordEntryRepository
       where: { tenantId, medicalRecordId },
       order: { recordedAt: "DESC" },
     });
+  }
+
+  override async delete(id: string): Promise<DeleteResult> {
+    const r = await this.typeORM.softDelete(id);
+    return { affected: r.affected ?? 0, raw: r.raw };
   }
 }

@@ -2,6 +2,8 @@ import {
   Column,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryColumn,
 } from 'typeorm';
@@ -20,7 +22,7 @@ export class Tenant {
   @Column({ type: 'varchar', length: 160 })
   name!: string;
 
-  @Column({ type: 'varchar', length: 200, nullable: true })
+  @Column({ name: 'legal_name', type: 'varchar', length: 200, nullable: true })
   legalName!: string | null;
 
   @Index({ unique: true })
@@ -36,6 +38,10 @@ export class Tenant {
 
   @Column({ type: 'json', nullable: true })
   metadata!: Record<string, unknown> | null;
+
+  /** Utilizador que criou esta instituição (tenant base pode diferir do tenant dos dados). */
+  @Column({ name: 'created_by_user_id', type: 'char', length: 36, nullable: true })
+  createdByUserId!: string | null;
 
   @Column({
     name: 'created_at',
@@ -53,6 +59,10 @@ export class Tenant {
     onUpdate: 'CURRENT_TIMESTAMP(3)',
   })
   updatedAt!: Date;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE' })
+  @JoinColumn({ name: 'created_by_user_id', referencedColumnName: 'id' })
+  createdBy!: User | null;
 
   @OneToMany(() => User, (user) => user.tenant)
   users!: User[];
