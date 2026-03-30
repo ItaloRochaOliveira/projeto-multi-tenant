@@ -1,6 +1,7 @@
 
 import logger from '@/config/winston';
 import BadRequest from '@/utils/errors/BadRequest';
+import Forbidden from '@/utils/errors/Forbidden';
 import NotFound from '@/utils/errors/NotFound';
 import Unauthorized from '@/utils/errors/Unauthorized';
 import HttpCode from '@/utils/HttpsCode';
@@ -111,6 +112,21 @@ export default (
 
     return res.status(err.statusCode).json({
       status: 'Unauthorized Error',
+      error: {
+        code: err.statusCode,
+        message: err.message,
+      },
+    });
+  }
+
+  if (err instanceof Forbidden) {
+    logger.error('Forbidden Error', {
+      message: err.message,
+      statusCode: err.statusCode,
+    });
+
+    return res.status(err.statusCode).json({
+      status: 'Forbidden Error',
       error: {
         code: err.statusCode,
         message: err.message,

@@ -1,5 +1,6 @@
 import type { AuthRequest } from "@/middleware/auth";
 import ConsultationCrudService from "@/service/consultation/ConsultationCrudService";
+import { resolveClinicalTenantId } from "@/utils/clinicalTenant";
 import TypeORMConsultationRepository from "@/service/repository/typeorm/typeormConsultations";
 import TypeORMPatientRepository from "@/service/repository/typeorm/typeormPatients";
 import TypeORMUsersRepository from "@/service/repository/typeorm/typeormUsers";
@@ -21,7 +22,8 @@ export default class ConsultationApiController {
 
   list = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const result = await this.service().list(req.user!.tenantId);
+      const tenantId = await resolveClinicalTenantId(req);
+      const result = await this.service().list(tenantId);
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -30,8 +32,9 @@ export default class ConsultationApiController {
 
   getById = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const tenantId = await resolveClinicalTenantId(req);
       const { id } = IdParamSchema.parse(req.params);
-      const result = await this.service().getById(req.user!.tenantId, id);
+      const result = await this.service().getById(tenantId, id);
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -40,8 +43,9 @@ export default class ConsultationApiController {
 
   create = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const tenantId = await resolveClinicalTenantId(req);
       const body = CreateConsultationBodySchema.parse(req.body);
-      const result = await this.service().create(req.user!.tenantId, body);
+      const result = await this.service().create(tenantId, body);
       res.status(201).json(result);
     } catch (e) {
       next(e);
@@ -50,9 +54,10 @@ export default class ConsultationApiController {
 
   update = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const tenantId = await resolveClinicalTenantId(req);
       const { id } = IdParamSchema.parse(req.params);
       const body = UpdateConsultationBodySchema.parse(req.body);
-      const result = await this.service().update(req.user!.tenantId, id, body);
+      const result = await this.service().update(tenantId, id, body);
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -61,8 +66,9 @@ export default class ConsultationApiController {
 
   remove = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const tenantId = await resolveClinicalTenantId(req);
       const { id } = IdParamSchema.parse(req.params);
-      const result = await this.service().remove(req.user!.tenantId, id);
+      const result = await this.service().remove(tenantId, id);
       res.status(200).json(result);
     } catch (e) {
       next(e);

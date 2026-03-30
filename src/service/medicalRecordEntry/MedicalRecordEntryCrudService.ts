@@ -3,6 +3,7 @@ import type { ServicePromise } from "@/interfaces/IServiceModel";
 import type ConsultationRepository from "@/service/repository/ConsultationRepository";
 import type MedicalRecordEntryRepository from "@/service/repository/MedicalRecordEntryRepository";
 import type MedicalRecordRepository from "@/service/repository/MedicalRecordRepository";
+import type TenantRepository from "@/service/repository/TenantRepository";
 import type UsersRepository from "@/service/repository/UsersRepository";
 import { ok } from "@/utils/apiResponse";
 import BadRequest from "@/utils/errors/BadRequest";
@@ -33,6 +34,7 @@ export default class MedicalRecordEntryCrudService {
     private readonly records: MedicalRecordRepository,
     private readonly consultations: ConsultationRepository,
     private readonly users: UsersRepository,
+    private readonly tenants: TenantRepository,
   ) {}
 
   private async assertRecord(tenantId: string, medicalRecordId: string) {
@@ -49,11 +51,15 @@ export default class MedicalRecordEntryCrudService {
     if (!c) throw new BadRequest("Consulta inválida para este tenant");
   }
 
+  /** Autor no mesmo tenant, ou admin, ou criador do tenant (dados noutra instituição com o mesmo JWT). */
   private async assertAuthor(tenantId: string, authorId: string) {
     const u = await this.users.getById(authorId);
-    if (!u || u.tenantId !== tenantId) {
-      throw new BadRequest("Autor inválido para este tenant");
-    }
+    if (!u) throw new BadRequest("Autor inválido");
+    if (u.tenantId === tenantId) return;
+    if (u.role === "admin") return;
+    const tenant = await this.tenants.getById(tenantId);
+    if (tenant?.createdByUserId === authorId) return;
+    throw new BadRequest("Autor inválido para este tenant");
   }
 
   async list(

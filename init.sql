@@ -1,9 +1,20 @@
 -- =============================================================================
 -- Multi-tenant saúde (MySQL 8+)
 -- Tenant = clínica / hospital. Isolamento forte: todo dado clínico exige tenant_id.
+--
+-- Docker: este ficheiro na raiz do repositório mapeia para
+--   /docker-entrypoint-initdb.d/01-init.sql (apenas na primeira criação do volume).
+-- Migrações idempotentes versionadas: migration.sql na raiz (serviço `migrate`).
 -- =============================================================================
 
 SET NAMES utf8mb4;
+
+-- Garante esquema correto (Docker CLI, import manual ou primeiro boot)
+CREATE DATABASE IF NOT EXISTS multi_tenant
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+USE multi_tenant;
+
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- -----------------------------------------------------------------------------
@@ -26,11 +37,13 @@ CREATE TABLE tenants (
   document      VARCHAR(20)  NULL COMMENT 'CNPJ ou identificador fiscal (opcional)',
   is_active     TINYINT(1)   NOT NULL DEFAULT 1,
   metadata      JSON         NULL COMMENT 'Configurações por tenant (timezone, branding, etc.)',
-  created_at    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
-  updated_at    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE (UTC_TIMESTAMP(3)),
+  created_by_user_id CHAR(36) NULL COMMENT 'Quem criou o tenant (pode ser users.tenant_id diferente)',
+  created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   UNIQUE KEY uq_tenants_slug (slug),
-  KEY ix_tenants_active (is_active)
+  KEY ix_tenants_active (is_active),
+  KEY ix_tenants_created_by (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='Clínica / hospital (tenant)';
 
@@ -46,8 +59,8 @@ CREATE TABLE users (
   role          VARCHAR(50)  NOT NULL DEFAULT 'staff' COMMENT 'Ex.: admin, doctor, reception',
   professional_registry VARCHAR(50) NULL COMMENT 'CRM, COREN, etc.',
   is_active     TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
-  updated_at    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE (UTC_TIMESTAMP(3)),
+  created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_tenant_email (tenant_id, email),
   KEY ix_users_tenant (tenant_id),
@@ -56,6 +69,11 @@ CREATE TABLE users (
     ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='Profissionais e staff; escopo por tenant';
+
+ALTER TABLE tenants
+  ADD CONSTRAINT fk_tenants_created_by_user
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id)
+  ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- -----------------------------------------------------------------------------
 -- Pacientes — dados sensíveis; linha sempre pertence a um único tenant
@@ -75,8 +93,8 @@ CREATE TABLE patients (
   postal_code     VARCHAR(20)  NULL,
   internal_code   VARCHAR(64)  NULL COMMENT 'Código interno da instituição',
   is_active       TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at      DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
-  updated_at      DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE (UTC_TIMESTAMP(3)),
+  created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at      DATETIME(3)  NULL COMMENT 'Soft delete para auditoria',
   PRIMARY KEY (id),
   UNIQUE KEY uq_patients_tenant_internal (tenant_id, internal_code),
@@ -104,8 +122,9 @@ CREATE TABLE consultations (
                     COMMENT 'scheduled, checked_in, in_progress, completed, cancelled, no_show',
   chief_complaint   VARCHAR(500) NULL COMMENT 'Queixa principal',
   notes             TEXT         NULL COMMENT 'Evolução resumida; PHI',
-  created_at        DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
-  updated_at        DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE (UTC_TIMESTAMP(3)),
+  created_at        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted_at        DATETIME(3)  NULL COMMENT 'Soft delete',
   PRIMARY KEY (id),
   KEY ix_consultations_tenant_scheduled (tenant_id, scheduled_at),
   KEY ix_consultations_tenant_patient (tenant_id, patient_id),
@@ -132,10 +151,11 @@ CREATE TABLE medical_records (
   blood_type   VARCHAR(10) NULL,
   allergies    TEXT        NULL COMMENT 'Alergias conhecidas; PHI',
   chronic_conditions TEXT NULL,
-  opened_at    DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
-  updated_at   DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE (UTC_TIMESTAMP(3)),
+  opened_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted_at   DATETIME(3) NULL COMMENT 'Soft delete',
   PRIMARY KEY (id),
-  UNIQUE KEY uq_medical_records_tenant_patient (tenant_id, patient_id),
+  KEY ix_medical_records_tenant_patient (tenant_id, patient_id),
   KEY ix_medical_records_tenant (tenant_id),
   CONSTRAINT fk_medical_records_tenant
     FOREIGN KEY (tenant_id) REFERENCES tenants (id)
@@ -159,8 +179,9 @@ CREATE TABLE medical_record_entries (
                      COMMENT 'progress, exam, prescription_ref, attachment_meta',
   title              VARCHAR(200) NULL,
   content            LONGTEXT    NOT NULL COMMENT 'Texto clínico; PHI',
-  recorded_at        DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
-  created_at         DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
+  recorded_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  created_at         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  deleted_at         DATETIME(3) NULL COMMENT 'Soft delete',
   PRIMARY KEY (id),
   KEY ix_mre_tenant_record (tenant_id, medical_record_id),
   KEY ix_mre_consultation (tenant_id, consultation_id),
@@ -264,10 +285,10 @@ BEGIN
       SET MESSAGE_TEXT = 'medical_record_entries: medical_record_id não pertence ao tenant_id';
   END IF;
   IF NOT EXISTS (
-    SELECT 1 FROM users u WHERE u.id = NEW.author_id AND u.tenant_id = NEW.tenant_id
+    SELECT 1 FROM users u WHERE u.id = NEW.author_id
   ) THEN
     SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'medical_record_entries: author_id não pertence ao tenant_id';
+      SET MESSAGE_TEXT = 'medical_record_entries: author_id inválido';
   END IF;
   IF NEW.consultation_id IS NOT NULL THEN
     IF NOT EXISTS (
@@ -292,10 +313,10 @@ BEGIN
       SET MESSAGE_TEXT = 'medical_record_entries: medical_record_id não pertence ao tenant_id';
   END IF;
   IF NOT EXISTS (
-    SELECT 1 FROM users u WHERE u.id = NEW.author_id AND u.tenant_id = NEW.tenant_id
+    SELECT 1 FROM users u WHERE u.id = NEW.author_id
   ) THEN
     SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'medical_record_entries: author_id não pertence ao tenant_id';
+      SET MESSAGE_TEXT = 'medical_record_entries: author_id inválido';
   END IF;
   IF NEW.consultation_id IS NOT NULL THEN
     IF NOT EXISTS (
@@ -311,16 +332,26 @@ END$$
 DELIMITER ;
 
 -- =============================================================================
--- Dados de exemplo (remova em produção ou use apenas em dev)
+-- Dados de exemplo DEV/APENAS LOCAL (remova em produção)
 -- =============================================================================
--- Substitua os UUIDs se preferir gerar na aplicação.
-/*
+-- Login POST /auth/login body: tenantSlug=clinica-exemplo, email=admin@clinica.local
+-- Senha em texto (só para este seed): DevAdmin123!
+-- Hash bcryptjs cost 14, alinhado a HashManager na API.
 INSERT INTO tenants (id, name, legal_name, slug, is_active)
 VALUES
   ('11111111-1111-1111-1111-111111111111', 'Clínica Exemplo', 'Clínica Exemplo LTDA', 'clinica-exemplo', 1);
 
-INSERT INTO users (id, tenant_id, email, password_hash, full_name, role, is_active)
+INSERT INTO users (
+  id, tenant_id, email, password_hash, full_name, role, professional_registry, is_active
+)
 VALUES
-  ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111',
-   'admin@clinica.local', '$2a$10$PLACEHOLDER_HASH_NOT_FOR_PRODUCTION', 'Admin Sistema', 'admin', 1);
-*/
+  (
+    '22222222-2222-2222-2222-222222222222',
+    '11111111-1111-1111-1111-111111111111',
+    'admin@clinica.local',
+    '$2a$14$4FwhFIbcp/K7C52143avA.JVK80tIi2Mn8q8uwLV.5CI9hLENNznC',
+    'Admin Sistema',
+    'admin',
+    NULL,
+    1
+  );
