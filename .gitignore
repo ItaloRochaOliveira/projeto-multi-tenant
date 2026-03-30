@@ -12,3 +12,6 @@ logs/*
 uploads/
 
 certificate/*
+
+teste/relatorio/relatorio-*.md
+teste/relatorio/ultimo.md
